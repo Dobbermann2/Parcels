@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 
 import numpy as np
@@ -418,17 +418,8 @@ def _assert_valid_uxdataarray(data: ux.UxDataArray):
             "This attribute is required for xarray.DataArray objects."
         )
 
-    # Validate attributes
-    required_keys = ["location", "mesh"]
-    for key in required_keys:
-        if key not in data.attrs.keys():
-            raise ValueError(
-                f"Field is missing a '{key}' attribute in the field's metadata. "
-                "This attribute is required for xarray.DataArray objects."
-            )
 
-
-def _assert_compatible_combination(data: xr.DataArray | ux.UxDataArray, grid: ux.Grid | XGrid):
+def _assert_compatible_combination(data: xr.DataArray | ux.UxDataArray, grid: UxGrid | XGrid):
     if isinstance(data, ux.UxDataArray):
         if not isinstance(grid, UxGrid):
             raise ValueError(
@@ -448,7 +439,7 @@ def _get_time_interval(data: xr.DataArray | ux.UxDataArray) -> TimeInterval | No
     return TimeInterval(data.time.values[0], data.time.values[-1])
 
 
-def _assert_same_time_interval(fields: list[Field]) -> None:
+def _assert_same_time_interval(fields: Sequence[Field]) -> None:
     if len(fields) == 0:
         return
 
