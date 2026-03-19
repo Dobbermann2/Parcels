@@ -447,8 +447,8 @@ def parse_sgrid(ds: xr.Dataset):
 
     except Exception as e:
         raise SGridParsingException(f"Error parsing {grid_topology=!r}") from e
-
     if isinstance(grid, Grid2DMetadata):
+        
         dimensions = grid.face_dimensions + (grid.vertical_dimensions or ())
     else:
         assert isinstance(grid, Grid3DMetadata)
@@ -463,7 +463,9 @@ def parse_sgrid(ds: xr.Dataset):
             # only include dimensions in dataset (ignore dimensions in metadata that may not exist - e.g., due to `.isel`)
             if dim in ds.dims:
                 coords[pos] = dim
-        xgcm_coords[axis] = coords
+                
+        if coords:
+            xgcm_coords[axis] = coords
 
     return (ds, {"coords": xgcm_coords})
 
