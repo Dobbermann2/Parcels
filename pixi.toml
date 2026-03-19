@@ -35,6 +35,7 @@ py-triangle = ">=20250106,<20250107"
 
 [dependencies]
 parcels = { path = "." }
+array-api-compat = ">=1.14.0,<2"
 
 [feature.rattler-build.dependencies]
 python = "*"
