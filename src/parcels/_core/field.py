@@ -7,9 +7,12 @@ from datetime import datetime
 import numpy as np
 import uxarray as ux
 import xarray as xr
+import cupy as cp
 
 from parcels._core.index_search import GRID_SEARCH_ERROR, LEFT_OUT_OF_BOUNDS, RIGHT_OUT_OF_BOUNDS, _search_time_index
 from parcels._core.particlesetview import ParticleSetView
+from parcels._core.particleset import ParticleSet
+
 from parcels._core.statuscodes import (
     AllParcelsErrorCodes,
     StatusCode,
@@ -110,13 +113,16 @@ class Field:
         self.data = data
         self.grid = grid
 
-        try:
-            self.time_interval = _get_time_interval(data)
-        except ValueError as e:
-            e.add_note(
-                f"Error getting time interval for field {name!r}. Are you sure that the time dimension on the xarray dataset is stored as timedelta, datetime or cftime datetime objects?"
-            )
-            raise e
+
+        self.time_interval = None
+
+        # try:
+        #     self.time_interval = _get_time_interval(data)
+        # except ValueError as e:
+        #     e.add_note(
+        #         f"Error getting time interval for field {name!r}. Are you sure that the time dimension on the xarray dataset is stored as timedelta, datetime or cftime datetime objects?"
+        #     )
+        #     raise e
 
         try:
             if isinstance(data, ux.UxDataArray):
@@ -213,9 +219,12 @@ class Field:
             _ei = None
         else:
             _ei = particles.ei[:, self.igrid]
-        z = np.atleast_1d(z)
-        y = np.atleast_1d(y)
-        x = np.atleast_1d(x)
+            
+        # Copy is required to prevent in-place modification of the original array
+        z = z.copy()
+        y = y.copy()
+        x = x.copy()
+        time = time.copy()
 
         particle_positions, grid_positions = _get_positions(self, time, z, y, x, particles, _ei)
 
@@ -228,6 +237,9 @@ class Field:
     def __getitem__(self, key):
         self._check_velocitysampling()
         try:
+            # Adds support for non-proxy ParticleSet
+            if isinstance(key, ParticleSet):
+                return self.eval(key.time, key.z, key.lat, key.lon, key)
             if isinstance(key, ParticleSetView):
                 return self.eval(key.time, key.z, key.lat, key.lon, key)
             else:
@@ -258,12 +270,12 @@ class VectorField:
         self.grid = U.grid
         self.igrid = U.igrid
 
-        if W is None:
-            _assert_same_time_interval((U, V))
-        else:
-            _assert_same_time_interval((U, V, W))
+        # if W is None:
+        #     _assert_same_time_interval((U, V))
+        # else:
+        #     _assert_same_time_interval((U, V, W))
 
-        self.time_interval = U.time_interval
+        self.time_interval = None
 
         if self.W:
             self.vector_type = "3D"
@@ -315,10 +327,13 @@ class VectorField:
             _ei = None
         else:
             _ei = particles.ei[:, self.igrid]
-        z = np.atleast_1d(z)
-        y = np.atleast_1d(y)
-        x = np.atleast_1d(x)
-
+            
+        # Copy is required to prevent in-place modification of the original array
+        z = z.copy()
+        y = y.copy()
+        x = x.copy()
+        time = time.copy()
+        
         particle_positions, grid_positions = _get_positions(self.U, time, z, y, x, particles, _ei)
 
         (u, v, w) = self._vector_interp_method(particle_positions, grid_positions, self)
@@ -333,6 +348,9 @@ class VectorField:
 
     def __getitem__(self, key):
         try:
+            # Adds support for non-proxy ParticleSet
+            if isinstance(key, ParticleSet):
+                return self.eval(key.time, key.z, key.lat, key.lon, key)
             if isinstance(key, ParticleSetView):
                 return self.eval(key.time, key.z, key.lat, key.lon, key)
             else:
@@ -366,12 +384,12 @@ def _update_particle_states_position(particles, grid_positions: dict):
     if particles:  # TODO also support uxgrid search
         for dim in ["X", "Y"]:
             if dim in grid_positions:
-                particles.state = np.maximum(
-                    np.where(grid_positions[dim]["index"] == -1, StatusCode.ErrorOutOfBounds, particles.state),
+                particles.state = cp.maximum(
+                    cp.where(grid_positions[dim]["index"] == -1, StatusCode.ErrorOutOfBounds, particles.state),
                     particles.state,
                 )
-                particles.state = np.maximum(
-                    np.where(
+                particles.state = cp.maximum(
+                    cp.where(
                         grid_positions[dim]["index"] == GRID_SEARCH_ERROR,
                         StatusCode.ErrorGridSearching,
                         particles.state,
@@ -379,14 +397,14 @@ def _update_particle_states_position(particles, grid_positions: dict):
                     particles.state,
                 )
         if "Z" in grid_positions:
-            particles.state = np.maximum(
-                np.where(
+            particles.state = cp.maximum(
+                cp.where(
                     grid_positions["Z"]["index"] == RIGHT_OUT_OF_BOUNDS, StatusCode.ErrorOutOfBounds, particles.state
                 ),
                 particles.state,
             )
-            particles.state = np.maximum(
-                np.where(
+            particles.state = cp.maximum(
+                cp.where(
                     grid_positions["Z"]["index"] == LEFT_OUT_OF_BOUNDS, StatusCode.ErrorThroughSurface, particles.state
                 ),
                 particles.state,
@@ -396,8 +414,8 @@ def _update_particle_states_position(particles, grid_positions: dict):
 def _update_particle_states_interp_value(particles, value):
     """Update the particle states based on the interpolated value, but only if state is not an Error already."""
     if particles:
-        particles.state = np.maximum(
-            np.where(np.isnan(value), StatusCode.ErrorInterpolation, particles.state), particles.state
+        particles.state = cp.maximum(
+            cp.where(cp.isnan(value), StatusCode.ErrorInterpolation, particles.state), particles.state
         )
 
 

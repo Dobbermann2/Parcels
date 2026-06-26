@@ -4,6 +4,7 @@ import operator
 from typing import Any, Literal
 
 import numpy as np
+import cupy as cp
 
 from parcels._compat import _attrgetter_helper
 from parcels._core.statuscodes import StatusCode
@@ -148,12 +149,12 @@ def get_default_particle(spatial_dtype: type[np.float32] | type[np.float64]) -> 
             Variable("dz", dtype=spatial_dtype, to_write=False),
             Variable(
                 "time",
-                dtype=np.float64,
+                dtype=np.float32,
                 attrs={"standard_name": "time", "units": "seconds", "axis": "T"},
             ),
             Variable(
                 "trajectory",
-                dtype=np.int64,
+                dtype=np.int32,
                 to_write="once",
                 attrs={
                     "long_name": "Unique identifier for each particle",
@@ -161,7 +162,7 @@ def get_default_particle(spatial_dtype: type[np.float32] | type[np.float64]) -> 
                 },
             ),
             Variable("obs_written", dtype=np.int32, initial=0, to_write=False),
-            Variable("dt", dtype=np.float64, initial=1.0, to_write=False),
+            Variable("dt", dtype=np.float32, initial=1.0, to_write=False),
             Variable("state", dtype=np.int32, initial=StatusCode.Evaluate, to_write=False),
         ]
     )
@@ -198,7 +199,7 @@ def create_particle_data(
 
         initial[var_name] = values.astype(dtypes[var_name])
 
-    data = {"ei": np.zeros((nparticles, ngrids), dtype=np.int32), **initial}
+    data = {"ei": cp.zeros((nparticles, ngrids), dtype=cp.int32), **initial}
 
     vars_to_create = {k: v for k, v in variables.items() if k not in data}
 
@@ -215,7 +216,7 @@ def _create_array_for_variable(variable: Variable, nparticles: int, time_interva
     assert not isinstance(variable.initial, operator.attrgetter), (
         "This function cannot handle attrgetter initial values."
     )
-    return np.full(
+    return cp.full(
         shape=(nparticles,),
         fill_value=variable.initial,
         dtype=variable.dtype,

@@ -155,12 +155,17 @@ class ParticleFile:
         pclass = pset._ptype
         time_interval = pset.fieldset.time_interval
         particle_data = pset._data
+        
+        # Explicitly convert CuPy data to NumPy arrays
+        particle_data_np = {k: v.get() for k, v in particle_data.items()}
+        
 
+        # Additional reference to the original data is required to update 'obs_written' field
         self._write_particle_data(
-            particle_data=particle_data, pclass=pclass, time_interval=time_interval, time=time, indices=indices
+            particle_data=particle_data_np, particle_data_ref=particle_data, pclass=pclass, time_interval=time_interval, time=time, indices=indices
         )
 
-    def _write_particle_data(self, *, particle_data, pclass, time_interval, time, indices=None):
+    def _write_particle_data(self, *, particle_data, particle_data_ref, pclass, time_interval, time, indices=None):
         # if pset._data._ncount == 0:
         #     warnings.warn(
         #         f"ParticleSet is empty on writing as array at time {time:g}",
@@ -238,7 +243,7 @@ class ParticleFile:
                         self._extend_zarr_dims(Z[var.name], store, dtype=var.dtype, axis=1)
                     Z[var.name].vindex[ids, obs] = particle_data[var.name][indices_to_write]
 
-        particle_data["obs_written"][indices_to_write] = obs + 1
+        particle_data_ref["obs_written"][indices_to_write] = obs + 1
 
 
 def _get_store_from_pathlike(path: Path | str) -> DirectoryStore:

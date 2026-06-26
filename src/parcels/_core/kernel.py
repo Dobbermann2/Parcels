@@ -5,6 +5,7 @@ import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
+import cupy as cp
 
 from parcels._core.basegrid import GridType
 from parcels._core.statuscodes import (
@@ -195,54 +196,26 @@ class Kernel:
         compute_time_direction = 1 if dt > 0 else -1
 
         pset._data["state"][:] = StatusCode.Evaluate
+        
+        evaluate_status_codes = cp.array( [StatusCode.Evaluate, StatusCode.Repeat])
 
-        while (len(pset) > 0) and np.any(np.isin(pset.state, [StatusCode.Evaluate, StatusCode.Repeat])):
-            time_to_endtime = compute_time_direction * (endtime - pset.time)
-
-            evaluate_particles = (np.isin(pset.state, [StatusCode.Success, StatusCode.Evaluate])) & (
-                time_to_endtime >= 0
-            )
-            if not np.any(evaluate_particles):
-                return StatusCode.Success
+        while (len(pset) > 0) and cp.any(cp.isin(pset.state, evaluate_status_codes)):
+            # Assumes lock-step particle simulation
+            time_to_endtime = compute_time_direction * (endtime - pset.time[0])
 
             # adapt dt to end exactly on endtime
             if compute_time_direction == 1:
-                pset.dt = np.maximum(np.minimum(pset.dt, time_to_endtime), 0)
+                pset.dt = cp.maximum(cp.minimum(pset.dt, time_to_endtime), 0)
             else:
-                pset.dt = np.minimum(np.maximum(pset.dt, -time_to_endtime), 0)
+                pset.dt = cp.minimum(cp.maximum(pset.dt, -time_to_endtime), 0)
 
-            # run kernels for all particles that need to be evaluated
+            # run kernels for ALL particles (without subsetting)
             for f in self._kernels:
-                f(pset[evaluate_particles], self._fieldset)
-
-                # check for particles that have to be repeated
-                repeat_particles = pset.state == StatusCode.Repeat
-                while np.any(repeat_particles):
-                    f(pset[repeat_particles], self._fieldset)
-                    repeat_particles = pset.state == StatusCode.Repeat
+                f(pset, self._fieldset)
 
             # revert to original dt (unless in RK45 mode)
             if not hasattr(self.fieldset, "RK45_tol"):
                 pset._data["dt"][:] = dt
-
-            # Set particle state for particles that reached endtime
-            particles_endofloop = (pset.state == StatusCode.Evaluate) & (pset.time == endtime)
-            pset[particles_endofloop].state = StatusCode.EndofLoop
-
-            # delete particles that signalled deletion
-            self.remove_deleted(pset)
-
-            # check and throw errors
-            if np.any(pset.state == StatusCode.StopAllExecution):
-                return StatusCode.StopAllExecution
-
-            for error_code, error_func in ErrorsToThrow.items():
-                if np.any(pset.state == error_code):
-                    inds = pset.state == error_code
-                    if error_code == StatusCode.ErrorOutsideTimeInterval:
-                        error_func(pset[inds].time)
-                    else:
-                        error_func(pset[inds].z, pset[inds].lat, pset[inds].lon)
 
             # Only prepend PositionUpdate kernel at the end of the first execute call to avoid adding dt to time too early
             if not pset._requires_prepended_positionupdate_kernel:

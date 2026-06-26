@@ -33,7 +33,7 @@ def _constrain_dt_to_within_time_interval(time_interval, time, dt):
 
 def AdvectionRK2(particles, fieldset):  # pragma: no cover
     """Advection of particles using second-order Runge-Kutta integration."""
-    dt = _constrain_dt_to_within_time_interval(fieldset.time_interval, particles.time, particles.dt)
+    dt = _constrain_dt_to_within_time_interval(None, particles.time, particles.dt)
     (u1, v1) = fieldset.UV[particles]
     lon1, lat1 = (particles.lon + u1 * 0.5 * dt, particles.lat + v1 * 0.5 * dt)
     (u2, v2) = fieldset.UV[particles.time + 0.5 * dt, particles.z, lat1, lon1, particles]

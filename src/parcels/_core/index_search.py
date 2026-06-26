@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
+import cupy as cp
 
 from parcels._core.statuscodes import _raise_outside_time_interval_error
 from parcels._core.utils.time import timedelta_to_float
@@ -75,12 +76,9 @@ def _search_time_index(field: Field, time: np.ndarray):
     if the sampled value is outside the time value range.
     """
     if field.time_interval is None:
-        return {
-            "T": {
-                "index": np.zeros(shape=time.shape, dtype=np.int32),
-                "bcoord": np.zeros(shape=time.shape, dtype=np.float32),
-            }
-        }
+        time_flt = field.data.time.data
+        ti, tau = _search_1d_array(time_flt, time)
+        return {"T": {"index": cp.atleast_1d(ti), "bcoord": cp.atleast_1d(tau)}}
 
     if not field.time_interval.is_all_time_in_interval(time):
         _raise_outside_time_interval_error(time, field=None)
@@ -88,7 +86,7 @@ def _search_time_index(field: Field, time: np.ndarray):
     time_flt = timedelta_to_float(field.data.time.data - field.time_interval.left)
     ti, tau = _search_1d_array(time_flt, time)
 
-    return {"T": {"index": np.atleast_1d(ti), "bcoord": np.atleast_1d(tau)}}
+    return {"T": {"index": cp.atleast_1d(ti), "bcoord": cp.atleast_1d(tau)}}
 
 
 def curvilinear_point_in_cell(grid, y: np.ndarray, x: np.ndarray, yi: np.ndarray, xi: np.ndarray):

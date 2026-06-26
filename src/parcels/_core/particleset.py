@@ -6,6 +6,8 @@ from collections.abc import Iterable
 from typing import Literal
 
 import numpy as np
+import cupy as cp
+
 import xarray as xr
 from tqdm import tqdm
 
@@ -70,48 +72,45 @@ class ParticleSet:
         self._kernel = None
 
         self.fieldset = fieldset
-        lon = np.empty(shape=0) if lon is None else np.array(lon).flatten()
-        lat = np.empty(shape=0) if lat is None else np.array(lat).flatten()
-        time = np.empty(shape=0) if time is None else np.array(time).flatten()
+        lon = cp.empty(shape=0) if lon is None else cp.array(lon).flatten()
+        lat = cp.empty(shape=0) if lat is None else cp.array(lat).flatten()
+        time = cp.empty(shape=0) if time is None else cp.array(time).flatten()
 
         if trajectory_ids is None:
-            trajectory_ids = np.arange(lon.size)
+            trajectory_ids = cp.arange(lon.size)
 
         if z is None:
             minz = 0
             for field in self.fieldset.fields.values():
                 if field.grid.depth is not None:
                     minz = min(minz, field.grid.depth[0])
-            z = np.ones(lon.size) * minz
+            z = cp.ones(lon.size) * minz
         else:
-            z = np.array(z).flatten()
+            z = cp.array(z).flatten()
         assert lon.size == lat.size and lon.size == z.size, "lon, lat, z don't all have the same lenghts"
 
         if time is None or len(time) == 0:
             # do not set a time yet (because sign_dt not known)
-            time = np.array(np.nan)
+            time = cp.array(np.nan)
         elif isinstance(time[0], np.datetime64) and self.fieldset.time_interval:
             time = timedelta_to_float(time - self.fieldset.time_interval.left)
         elif isinstance(time[0], np.timedelta64):
             time = timedelta_to_float(time)
         else:
             raise TypeError("particle time must be a datetime, timedelta, or date object")
-        time = np.repeat(time, lon.size) if time.size == 1 else time
+        time = cp.repeat(time, lon.size) if time.size == 1 else time
 
         assert lon.size == time.size, "time and positions (lon, lat, z) do not have the same lengths."
 
-        if fieldset.time_interval:
-            _warn_particle_times_outside_fieldset_time_bounds(time, fieldset.time_interval)
-
         for kwvar in kwargs:
-            kwargs[kwvar] = np.array(kwargs[kwvar]).flatten()
+            kwargs[kwvar] = cp.array(kwargs[kwvar]).flatten()
             assert lon.size == kwargs[kwvar].size, f"{kwvar} and positions (lon, lat, z) don't have the same lengths."
 
         self._data = create_particle_data(
             pclass=pclass,
             nparticles=lon.size,
             ngrids=len(fieldset.gridset),
-            time_interval=fieldset.time_interval,
+            time_interval=None,
             initial=dict(
                 lon=lon,
                 lat=lat,
@@ -161,7 +160,7 @@ class ParticleSet:
 
     def __getitem__(self, index):
         """Get a single particle by index."""
-        return ParticleSetView(self._data, index=index, ptype=self._ptype)
+        raise Exception("ParticleSet subsetting is disabled in GPU-accelerated Parcels")
 
     def __setattr__(self, name, value):
         if name in ["_data"]:
@@ -400,11 +399,14 @@ class ParticleSet:
 
         dt, sign_dt = _convert_dt_to_float(dt)
         self._data["dt"][:] = dt
+        
+        # Convert deltatime to float32
+        self._data["dt"] =  self._data["dt"].astype(np.float32)
 
         runtime = _convert_runtime_to_float(runtime)
 
         start_time, end_time = _get_simulation_start_and_end_times(
-            self.fieldset.time_interval, self._data["time"], runtime, endtime, sign_dt
+            None, self._data["time"], runtime, endtime, sign_dt
         )
 
         # Set the time of the particles if it hadn't been set on initialisation
@@ -420,7 +422,7 @@ class ParticleSet:
 
         if verbose_progress:
             pbar = tqdm(total=end_time - start_time, file=sys.stdout)
-            pbar.set_description("Integration time: " + str(start_time))
+            pbar.set_description("Integration time: " + str(time) )
 
         next_output = start_time if output_file else None
 

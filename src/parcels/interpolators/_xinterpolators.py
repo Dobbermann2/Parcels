@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import cupy as cp
 import numpy as np
 import xarray as xr
 from dask import is_dask_collection
@@ -34,6 +35,56 @@ def ZeroInterpolator_Vector(
     return 0.0
 
 
+
+def get_corner_data_Agrid_cp(
+    data: cp.ndarray,
+    ti, zi, yi, xi,
+    lenT: int,
+    lenZ: int,
+):
+    """NOTE: Generative AI (ChatGPT) was used to rewrite the _get_corner_data_Agrid function for parallel computation"""
+    npart = xi.shape[0]
+
+    # --- XY corners ---
+    dx = cp.array([0, 1, 0, 1])
+    dy = cp.array([0, 0, 1, 1])
+
+    xi_c = (xi[:, None] + dx).reshape(npart, 2, 2)
+    yi_c = (yi[:, None] + dy).reshape(npart, 2, 2)
+
+    xi_c = cp.clip(xi_c, 0, data.shape[3] - 1)
+    yi_c = cp.clip(yi_c, 0, data.shape[2] - 1)
+
+    # --- Z corners (ALWAYS 2) ---
+    zi_1 = cp.clip(zi + 1, 0, data.shape[1] - 1)
+    zi_c = cp.stack([zi, zi_1], axis=1)  # (npart, 2)
+
+    # --- T corners (ALWAYS 2) ---
+    ti_1 = cp.clip(ti + 1, 0, data.shape[0] - 1)
+    ti_c = cp.stack([ti, ti_1], axis=1)  # (npart, 2)
+
+    # --- expand to 5D ---
+    xi_c = xi_c[:, None, None, :, :]        # (npart,1,1,2,2)
+    yi_c = yi_c[:, None, None, :, :]
+    zi_c = zi_c[:, None, :, None, None]     # (npart,1,2,1,1)
+    ti_c = ti_c[:, :, None, None, None]     # (npart,2,1,1,1)
+
+    # --- broadcast ---
+    ti_c, zi_c, yi_c, xi_c = cp.broadcast_arrays(ti_c, zi_c, yi_c, xi_c)
+
+    # --- gather ---
+    corner_data = data[ti_c, zi_c, yi_c, xi_c]
+    # shape: (npart, 2, 2, 2, 2)
+
+    # --- move npart last ---
+    corner_data = corner_data.transpose(1, 2, 3, 4, 0)
+    # shape: (2, 2, 2, 2, npart)
+
+    # --- slice if needed ---
+    corner_data = corner_data[:lenT, :lenZ]
+
+    return corner_data
+
 def _get_corner_data_Agrid(
     data: np.ndarray | xr.DataArray,
     ti: int,
@@ -48,7 +99,7 @@ def _get_corner_data_Agrid(
     """Helper function to get the corner data for a given A-grid field and position."""
     # Time coordinates: 8 points at ti, then 8 points at ti+1
     if lenT == 1:
-        ti = np.repeat(ti, lenZ * 4)
+        ti = cp.repeat(ti, lenZ * 4)
     else:
         ti_1 = np.clip(ti + 1, 0, data.shape[0] - 1)
         ti = np.concatenate([np.repeat(ti, lenZ * 4), np.repeat(ti_1, lenZ * 4)])
@@ -95,6 +146,16 @@ def _get_offsets_dictionary(grid):
     return offsets
 
 
+@cp.fuse()
+def interp(xsi, eta, c00, c01, c10, c11):
+    return (
+        (1 - xsi) * (1 - eta) * c00
+        + xsi * (1 - eta) * c01
+        + (1 - xsi) * eta * c10
+        + xsi * eta * c11
+    )
+
+
 def XLinear(
     particle_positions: dict[str, float | np.ndarray],
     grid_positions: dict[XgridAxis, dict[str, int | float | np.ndarray]],
@@ -107,32 +168,27 @@ def XLinear(
     ti, tau = grid_positions["T"]["index"], grid_positions["T"]["bcoord"]
 
     axis_dim = field.grid.get_axis_dim_mapping(field.data.dims)
-    data = field.data
+    data = field.data.data
 
-    lenT = 2 if np.any(tau > 0) else 1
-    lenZ = 2 if np.any(zeta > 0) else 1
+    lenT = 2 if cp.any(tau > 0) else 1
+    lenZ = 2 if cp.any(zeta > 0) else 1
 
-    corner_data = _get_corner_data_Agrid(data, ti, zi, yi, xi, lenT, lenZ, len(xsi), axis_dim)
+    corner_data = get_corner_data_Agrid_cp(data, ti, zi, yi, xi, lenT, lenZ, len(xsi), axis_dim)
 
     if lenT == 2:
-        tau = tau[np.newaxis, :]
+        tau = tau[cp.newaxis, :]
         corner_data = corner_data[0, :] * (1 - tau) + corner_data[1, :] * tau
     else:
         corner_data = corner_data[0, :]
 
     if lenZ == 2:
-        zeta = zeta[np.newaxis, :]
+        zeta = zeta[cp.newaxis, :]
         corner_data = corner_data[0, :] * (1 - zeta) + corner_data[1, :] * zeta
     else:
         corner_data = corner_data[0, :]
 
-    value = (
-        (1 - xsi) * (1 - eta) * corner_data[0, 0, :]
-        + xsi * (1 - eta) * corner_data[0, 1, :]
-        + (1 - xsi) * eta * corner_data[1, 0, :]
-        + xsi * eta * corner_data[1, 1, :]
-    )
-    return value.compute() if is_dask_collection(value) else value
+    value = interp(xsi, eta, corner_data[0, 0, :], corner_data[0, 1, :], corner_data[1, 0, :], corner_data[1, 1, :])
+    return value
 
 
 def XConstantField(

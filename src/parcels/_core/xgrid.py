@@ -2,6 +2,7 @@ from collections.abc import Hashable, Sequence
 from functools import cached_property
 from typing import Any, Literal, cast
 
+import cupy as cp
 import numpy as np
 import numpy.typing as npt
 import xarray as xr
@@ -297,7 +298,7 @@ class XGrid(BaseGrid):
         if "Z" in self.axes:
             zi, zeta = _search_1d_array(ds.depth.values, z)
         else:
-            zi, zeta = np.zeros(z.shape, dtype=int), np.zeros(z.shape, dtype=float)
+            zi, zeta = cp.zeros(z.shape, dtype=int), cp.zeros(z.shape, dtype=float)
 
         if "X" in self.axes and "Y" in self.axes and ds.lon.ndim == 2:
             yi, xi = None, None
@@ -318,14 +319,14 @@ class XGrid(BaseGrid):
             raise NotImplementedError("Searching in >2D lon/lat arrays is not implemented yet.")
 
         if "Y" in self.axes:
-            yi, eta = _search_1d_array(ds.lat.values, y)
+            yi, eta = _search_1d_array(ds.lat.data, y)
         else:
-            yi, eta = np.zeros(y.shape, dtype=int), np.zeros(y.shape, dtype=float)
+            yi, eta = cp.zeros(y.shape, dtype=int), cp.zeros(y.shape, dtype=float)
 
         if "X" in self.axes:
-            xi, xsi = _search_1d_array(ds.lon.values, x)
+            xi, xsi = _search_1d_array(ds.lon.data, x)
         else:
-            xi, xsi = np.zeros(x.shape, dtype=int), np.zeros(x.shape, dtype=float)
+            xi, xsi = cp.zeros(x.shape, dtype=int), cp.zeros(x.shape, dtype=float)
 
         return {
             "Z": {"index": zi, "bcoord": zeta},
