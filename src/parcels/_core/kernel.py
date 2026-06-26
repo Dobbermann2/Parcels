@@ -203,6 +203,9 @@ class Kernel:
             # Assumes lock-step particle simulation
             time_to_endtime = compute_time_direction * (endtime - pset.time[0])
 
+            if(time_to_endtime <= 0):
+                return StatusCode.Success
+
             # adapt dt to end exactly on endtime
             if compute_time_direction == 1:
                 pset.dt = cp.maximum(cp.minimum(pset.dt, time_to_endtime), 0)

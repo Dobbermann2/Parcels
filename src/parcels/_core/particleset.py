@@ -422,7 +422,7 @@ class ParticleSet:
 
         if verbose_progress:
             pbar = tqdm(total=end_time - start_time, file=sys.stdout)
-            pbar.set_description("Integration time: " + str(time) )
+            pbar.set_description("Integration time: " + str(start_time))
 
         next_output = start_time if output_file else None
 
@@ -444,7 +444,7 @@ class ParticleSet:
                         next_output += outputdt * sign_dt
 
             if verbose_progress:
-                pbar.set_description("Integration time: " + str(float_to_datelike(time, self.fieldset.time_interval)))
+                pbar.set_description("Integration time: " + str(time))
                 pbar.update(next_time - time)
 
             time = next_time

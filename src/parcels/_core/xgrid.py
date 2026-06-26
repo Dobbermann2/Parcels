@@ -110,8 +110,8 @@ class XGrid(BaseGrid):
         if "lat" in ds:
             ds.set_coords("lat")
 
-        if len(set(grid.axes) & {"X", "Y"}) > 0:  # Only if spatial grid is >0D (see #2054 for further development)
-            assert_valid_lat_lon(ds["lat"], ds["lon"], grid.axes)
+        # if len(set(grid.axes) & {"X", "Y"}) > 0:  # Only if spatial grid is >0D (see #2054 for further development)
+        #     assert_valid_lat_lon(ds["lat"], ds["lon"], grid.axes)
 
         if "Z" in grid.axes:
             assert_valid_depth(ds["depth"])

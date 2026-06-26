@@ -173,7 +173,7 @@ def XLinear(
     lenT = 2 if cp.any(tau > 0) else 1
     lenZ = 2 if cp.any(zeta > 0) else 1
 
-    corner_data = get_corner_data_Agrid_cp(data, ti, zi, yi, xi, lenT, lenZ, len(xsi), axis_dim)
+    corner_data = get_corner_data_Agrid_cp(data, ti, zi, yi, xi, lenT, lenZ)
 
     if lenT == 2:
         tau = tau[cp.newaxis, :]

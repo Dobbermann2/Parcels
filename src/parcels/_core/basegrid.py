@@ -7,6 +7,7 @@ from enum import IntEnum
 from typing import TYPE_CHECKING
 
 import numpy as np
+import cupy as cp
 
 from parcels._core.spatialhash import SpatialHash
 
@@ -109,8 +110,8 @@ class BaseGrid(ABC):
         NotImplementedError
             Raised if the method is not implemented for the current grid type.
         """
-        dims = np.array([self.get_axis_dim(axis) for axis in self.axes], dtype=int)
-        indices = np.array([axis_indices[axis] for axis in self.axes], dtype=int)
+        dims = cp.array([self.get_axis_dim(axis) for axis in self.axes], dtype=int)
+        indices = cp.array([axis_indices[axis] for axis in self.axes], dtype=int)
         return _ravel(dims, indices)
 
     def unravel_index(self, ei: int) -> dict[str, np.ndarray]:
