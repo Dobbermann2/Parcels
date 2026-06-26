@@ -400,6 +400,7 @@ class ParticleSet:
 
         dt, sign_dt = _convert_dt_to_float(dt)
         self._data["dt"][:] = dt
+        self._data["dt"] =  self._data["dt"].astype(np.float32)
 
         runtime = _convert_runtime_to_float(runtime)
 

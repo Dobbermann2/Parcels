@@ -199,9 +199,8 @@ class Kernel:
         while (len(pset) > 0) and np.any(np.isin(pset.state, [StatusCode.Evaluate, StatusCode.Repeat])):
             time_to_endtime = compute_time_direction * (endtime - pset.time)
 
-            evaluate_particles = (np.isin(pset.state, [StatusCode.Success, StatusCode.Evaluate])) & (
-                time_to_endtime >= 0
-            )
+            evaluate_particles = time_to_endtime >= 0
+             
             if not np.any(evaluate_particles):
                 return StatusCode.Success
 
@@ -236,13 +235,13 @@ class Kernel:
             if np.any(pset.state == StatusCode.StopAllExecution):
                 return StatusCode.StopAllExecution
 
-            for error_code, error_func in ErrorsToThrow.items():
-                if np.any(pset.state == error_code):
-                    inds = pset.state == error_code
-                    if error_code == StatusCode.ErrorOutsideTimeInterval:
-                        error_func(pset[inds].time)
-                    else:
-                        error_func(pset[inds].z, pset[inds].lat, pset[inds].lon)
+            # for error_code, error_func in ErrorsToThrow.items():
+            #     if np.any(pset.state == error_code):
+            #         inds = pset.state == error_code
+            #         if error_code == StatusCode.ErrorOutsideTimeInterval:
+            #             error_func(pset[inds].time)
+            #         else:
+            #             error_func(pset[inds].z, pset[inds].lat, pset[inds].lon)
 
             # Only prepend PositionUpdate kernel at the end of the first execute call to avoid adding dt to time too early
             if not pset._requires_prepended_positionupdate_kernel:

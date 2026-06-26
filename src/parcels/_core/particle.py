@@ -148,7 +148,7 @@ def get_default_particle(spatial_dtype: type[np.float32] | type[np.float64]) -> 
             Variable("dz", dtype=spatial_dtype, to_write=False),
             Variable(
                 "time",
-                dtype=np.float64,
+                dtype=np.float32,
                 attrs={"standard_name": "time", "units": "seconds", "axis": "T"},
             ),
             Variable(
@@ -161,7 +161,7 @@ def get_default_particle(spatial_dtype: type[np.float32] | type[np.float64]) -> 
                 },
             ),
             Variable("obs_written", dtype=np.int32, initial=0, to_write=False),
-            Variable("dt", dtype=np.float64, initial=1.0, to_write=False),
+            Variable("dt", dtype=np.float32, initial=1.0, to_write=False),
             Variable("state", dtype=np.int32, initial=StatusCode.Evaluate, to_write=False),
         ]
     )
